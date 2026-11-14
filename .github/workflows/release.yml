@@ -1,0 +1,30 @@
+# Builds ObviousFishing-<version>.zip and publishes it whenever a version tag
+# is pushed, e.g.:  git tag -a v1.0.0 -m "v1.0.0" && git push origin v1.0.0
+#
+# - Always: creates a GitHub Release with the zip attached.
+# - CurseForge: also uploads there once the CF_API_KEY repository secret is set
+#   and ObviousFishing.toc has an "## X-Curse-Project-ID:" line (see CURSEFORGE.md).
+name: Package and release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # needed to create the GitHub Release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      CF_API_KEY: ${{ secrets.CF_API_KEY }}
+      GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # full history, used for the changelog
+
+      - name: Package and release
+        uses: BigWigsMods/packager@v2

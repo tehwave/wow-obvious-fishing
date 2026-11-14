@@ -1,0 +1,8 @@
+# Read by BigWigsMods/packager when building the release zip.
+package-as: ObviousFishing
+
+# Keep developer-only files out of the zip players download.
+ignore:
+  - AGENTS.md
+  - CURSEFORGE.md
+  - media
