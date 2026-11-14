@@ -120,20 +120,35 @@ local function RestoreBoost(reason)
     end
 end
 
--- a sound setting changed mid-fishing: swap the boost in place, quietly
-local function ReapplyBoost()
-    if DB.saved then
-        RestoreBoost(false)
-        ApplyBoost(true)
-    end
-end
+-- If the restore timer fires in combat, wait until combat ends: some CVars can't
+-- be changed in combat, and DB.saved is the only copy of the original values.
+local combatWait = CreateFrame("Frame")
+combatWait:SetScript("OnEvent", function(self)
+    self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+    if not isFishing then RestoreBoost() end
+end)
 
 local function ScheduleRestore()
     if restoreTimer then restoreTimer:Cancel() end
     restoreTimer = C_Timer.NewTimer(DB.restoreDelay, function()
         restoreTimer = nil
-        if not isFishing then RestoreBoost() end
+        if isFishing then return end
+        if InCombatLockdown() then
+            combatWait:RegisterEvent("PLAYER_REGEN_ENABLED")
+        else
+            RestoreBoost()
+        end
     end)
+end
+
+-- A sound setting changed while boosted: swap the boost in place, quietly. Both
+-- calls cancel the restore timer, so re-arm it if we've already stopped fishing.
+local function ReapplyBoost()
+    if DB.saved then
+        RestoreBoost(false)
+        ApplyBoost(true)
+        if not isFishing then ScheduleRestore() end
+    end
 end
 
 ---------------------------------------------------------------------------
@@ -154,23 +169,20 @@ local function LayoutMarker()
     icon:SetTexCoord(col / 4, (col + 1) / 4, row / 4, (row + 1) / 4)
 end
 
-local softGUID -- last GUID from PLAYER_SOFT_INTERACT_CHANGED
-
-local POOL_WORDS = { "school", "pool", "wreckage", "debris", "floating", "swarm", "slick" }
+local softGUID      -- last GUID from PLAYER_SOFT_INTERACT_CHANGED
+local softChangedAt -- when that event last fired
 
 local function IsBobberGUID(guid)
     if not guid then return false end
     local kind, _, _, _, _, id = strsplit("-", guid)
     if kind ~= "GameObject" then return false end
     if id == BOBBER_ENTRY_ID then return true end
+    -- Without the known entry ID, judge by name, but only when the name belongs to
+    -- this exact object (the GUID may be a stale one from the soft-target event).
+    if UnitGUID("softinteract") ~= guid then return false end
     local name = UnitName("softinteract")
     if not name then return true end -- unnamed game object while fishing: assume bobber
-    name = name:lower()
-    if name:find("bobber") then return true end
-    for _, w in ipairs(POOL_WORDS) do
-        if name:find(w) then return false end
-    end
-    return true -- some other game object right in front of you while fishing
+    return name:lower():find("bobber") ~= nil
 end
 
 local function PlateToken(p)
@@ -181,17 +193,19 @@ end
 -- *new* bobber that shows up after our cast and ignore every other one.
 local myBobberGUID, preCastGUID, lastBobberGUID
 
--- returns plate, guid, how
-local function FindBobberPlate()
+-- returns plate, guid, how. Only lock = true (RefreshMarker) may claim a bobber
+-- as ours; /bobber debug calls this without it so diagnostics change nothing.
+local function FindBobberPlate(lock)
     local guid = UnitGUID("softinteract") or softGUID
     if not IsBobberGUID(guid) then return nil, guid, "no bobber soft target" end
     if not myBobberGUID then
         if guid == preCastGUID or guid == lastBobberGUID then
             return nil, guid, "waiting for your bobber"
         end
-        myBobberGUID = guid
+        if lock then myBobberGUID = guid end
+    elseif guid ~= myBobberGUID then
+        return nil, guid, "someone else's bobber"
     end
-    if guid ~= myBobberGUID then return nil, guid, "someone else's bobber" end
     if not C_NamePlate then return nil, guid, "no nameplate API" end
     local plate = C_NamePlate.GetNamePlateForUnit("softinteract")
     if plate then return plate, guid, "softinteract" end
@@ -207,7 +221,7 @@ local testing = false
 local function RefreshMarker()
     if testing then return end
     if not isFishing or not DB.showMarker then marker:Hide(); return end
-    local plate = FindBobberPlate()
+    local plate = FindBobberPlate(true)
     if not plate or (plate.IsForbidden and plate:IsForbidden()) then
         marker:Hide(); return
     end
@@ -248,6 +262,7 @@ local MODERN = ATLAS.fill and ATLAS.border and true or false
 
 local bar = CreateFrame("StatusBar", "ObviousFishingBar", UIParent)
 bar:SetFrameStrata("HIGH")
+bar:SetMinMaxValues(0, 1) -- value is the fraction of the cast left
 bar:SetMovable(true)
 bar:EnableMouse(true)
 bar:RegisterForDrag("LeftButton")
@@ -318,12 +333,10 @@ else
     barText:SetPoint("TOP", bar, "TOP", 0, 5)
 end
 
+barText:SetText("Fishing") -- replaced with the localized spell name at login
+
 local barTime = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 barTime:SetPoint("LEFT", bar, "RIGHT", 8, 0)
-
-local hint = bar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-hint:SetPoint("TOP", barTextBox or bar, "BOTTOM", 0, -6)
-hint:SetTextColor(1, 0.4, 0.4)
 
 local function PlaceBar()
     bar:SetScale(DB.barScale)
@@ -333,41 +346,35 @@ local function PlaceBar()
     else bar:SetPoint("CENTER", UIParent, "CENTER", 0, 180) end
 end
 
--- The bar's OnUpdate also drives marker polling, so when the bar is turned off
--- it stays "shown" but invisible and click-through.
 local function ApplyBarVisibility()
-    local visible = DB.showBar or testing
-    bar:SetAlpha(visible and 1 or 0)
-    bar:EnableMouse(visible)
+    bar:SetShown(testing or (isFishing and DB.showBar))
 end
 
+-- The real cast and the preview keep separate timings, so a preview during a
+-- cast doesn't disturb the real cast's bar.
 local castStart, castEnd = 0, 0
-local sinceRefresh = 0
+local testStart, testEnd = 0, 0
 
-bar:SetScript("OnUpdate", function(self, elapsed)
-    local now = GetTime()
-    local total = castEnd - castStart
+bar:SetScript("OnUpdate", function(self)
+    local s, e = castStart, castEnd
+    if testing then s, e = testStart, testEnd end
+    local total = e - s
     if total <= 0 then return end
-    local left = math.max(0, castEnd - now)
-    self:SetMinMaxValues(0, total)
-    self:SetValue(left)
+    local left = math.max(0, e - GetTime())
+    self:SetValue(left / total)
     barSpark:ClearAllPoints()
     barSpark:SetPoint("CENTER", self, "LEFT", self:GetWidth() * (left / total), MODERN and 0 or 2)
-    barText:SetText(FISHING_NAME or "Fishing")
     barTime:SetFormattedText("%.1f", left)
-    -- poll in case a nameplate/soft-target event was missed
-    sinceRefresh = sinceRefresh + elapsed
-    if sinceRefresh > 0.2 then sinceRefresh = 0; RefreshMarker() end
-    if marker:IsShown() or testing or not DB.showMarker then
-        hint:SetText("")
-    else
-        local _, _, how = FindBobberPlate()
-        if how == "someone else's bobber" then
-            hint:SetText("Highlighting someone else's bobber - turn toward yours")
-        else
-            hint:SetText("Bobber not highlighted - face it / turn toward it")
-        end
-    end
+end)
+
+-- While fishing, re-check the marker a few times a second in case a nameplate
+-- or soft-target event was missed. Independent of the bar, which may be off.
+local poller = CreateFrame("Frame")
+poller:Hide()
+local sincePoll = 0
+poller:SetScript("OnUpdate", function(_, elapsed)
+    sincePoll = sincePoll + elapsed
+    if sincePoll > 0.2 then sincePoll = 0; RefreshMarker() end
 end)
 
 ---------------------------------------------------------------------------
@@ -379,9 +386,19 @@ local function IsFishingSpell(spellID)
     return false
 end
 
-local function StartFishing()
+-- resumed: picking up a cast already in progress (after /reload)
+local function StartFishing(resumed)
     isFishing = true
-    preCastGUID = UnitGUID("softinteract") or softGUID
+    -- Whatever is soft-targeted at cast time is an older object, so it's excluded
+    -- from the lock-on. Not when resuming (it's likely our bobber already), and
+    -- not when the soft target changed at the very moment of the cast (it may
+    -- already be our freshly spawned bobber).
+    local justChanged = softChangedAt and (GetTime() - softChangedAt) < 0.5
+    if resumed or justChanged then
+        preCastGUID = nil
+    else
+        preCastGUID = UnitGUID("softinteract") or softGUID
+    end
     myBobberGUID = nil
     ApplyBoost()
     local _, _, _, startMS, endMS = UnitChannelInfo("player")
@@ -391,7 +408,7 @@ local function StartFishing()
         castStart, castEnd = GetTime(), GetTime() + 21
     end
     ApplyBarVisibility()
-    bar:Show()
+    poller:Show()
     RefreshMarker()
     -- the nameplate can take a moment to appear after the bobber lands
     C_Timer.After(0.3, RefreshMarker)
@@ -402,23 +419,27 @@ local function StopFishing()
     isFishing = false
     lastBobberGUID = myBobberGUID or lastBobberGUID
     myBobberGUID = nil
-    bar:Hide()
-    marker:Hide()
+    poller:Hide()
+    ApplyBarVisibility()
+    if not testing then marker:Hide() end
     ScheduleRestore()
 end
 
+local testToken = 0
 local function RunTest()
+    testToken = testToken + 1
+    local token = testToken
     testing = true
     marker:ClearAllPoints()
     marker:SetPoint("CENTER", UIParent, "CENTER", 0, -60)
     marker:Show()
-    castStart, castEnd = GetTime(), GetTime() + 6
+    testStart, testEnd = GetTime(), GetTime() + 6
     ApplyBarVisibility()
-    bar:Show()
     C_Timer.After(6, function()
+        if token ~= testToken then return end -- a newer preview is still running
         testing = false
         ApplyBarVisibility()
-        if not isFishing then bar:Hide(); marker:Hide() else RefreshMarker() end
+        if isFishing then RefreshMarker() else marker:Hide() end
     end)
 end
 
@@ -441,6 +462,11 @@ local function RegisterSettings()
             DEFAULTS[key], get or function() return DB[key] end, set)
     end
 
+    local function Checkbox(key, name, onChange, tooltip)
+        Settings.CreateCheckbox(category,
+            Setting(key, VT.Bool, name, nil, function(v) DB[key] = v; onChange() end), tooltip)
+    end
+
     local function Slider(setting, minV, maxV, step, fmt, tooltip)
         local options = Settings.CreateSliderOptions(minV, maxV, step)
         if MinimalSliderWithSteppersMixin and MinimalSliderWithSteppersMixin.Label then
@@ -451,9 +477,7 @@ local function RegisterSettings()
 
     -- Sound
     Header("Sound while fishing")
-    Settings.CreateCheckbox(category,
-        Setting("soundBoost", VT.Bool, "Turn sound up while fishing", nil,
-            function(v) DB.soundBoost = v; ReapplyBoost() end),
+    Checkbox("soundBoost", "Turn sound up while fishing", ReapplyBoost,
         "Raises game sound while you fish so the bite splash is easy to hear. Your own sound settings come back when you stop.")
 
     local vol = Settings.RegisterProxySetting(category, "ObviousFishing_masterVolume", VT.Number,
@@ -463,20 +487,14 @@ local function RegisterSettings()
     Slider(vol, 0, 100, 5, function(v) return ("%d%%"):format(v) end,
         "Master volume used while fishing.")
 
-    Settings.CreateCheckbox(category,
-        Setting("muteMusic", VT.Bool, "Mute music", nil,
-            function(v) DB.muteMusic = v; ReapplyBoost() end),
+    Checkbox("muteMusic", "Mute music", ReapplyBoost,
         "Silences music while you fish.")
-    Settings.CreateCheckbox(category,
-        Setting("muteAmbience", VT.Bool, "Mute ambience", nil,
-            function(v) DB.muteAmbience = v; ReapplyBoost() end),
+    Checkbox("muteAmbience", "Mute ambience", ReapplyBoost,
         "Silences ambient sounds (wind, water, crowds) while you fish.")
 
     -- Bobber
     Header("Bobber")
-    Settings.CreateCheckbox(category,
-        Setting("showMarker", VT.Bool, "Mark your bobber", nil,
-            function(v) DB.showMarker = v; RefreshMarker() end),
+    Checkbox("showMarker", "Mark your bobber", RefreshMarker,
         "Shows a raid target icon on your own bobber, so you can tell it apart from other players' bobbers.")
 
     local iconSetting = Setting("raidIcon", VT.Number, "Marker icon", nil,
@@ -495,13 +513,21 @@ local function RegisterSettings()
 
     -- Cast bar
     Header("Cast bar")
-    Settings.CreateCheckbox(category,
-        Setting("showBar", VT.Bool, "Show fishing cast bar", nil,
-            function(v) DB.showBar = v; ApplyBarVisibility() end),
+    Checkbox("showBar", "Show fishing cast bar", ApplyBarVisibility,
         "A cast bar showing how long your cast has left. Shift-drag it to move it.")
 
     Slider(Setting("barScale", VT.Number, "Cast bar size", nil,
-            function(v) DB.barScale = v; PlaceBar() end),
+            function(v)
+                -- saved offsets are in the bar's scaled units; rescale them so the
+                -- bar stays in the same spot on screen
+                local p = DB.barPoint
+                if p and v > 0 then
+                    local r = DB.barScale / v
+                    p[3], p[4] = p[3] * r, p[4] * r
+                end
+                DB.barScale = v
+                PlaceBar()
+            end),
         0.5, 3, 0.1, function(v) return ("%.1fx"):format(v) end, "Size of the fishing cast bar.")
 
     if layout and CreateSettingsButtonInitializer then
@@ -545,11 +571,15 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3)
         end
     elseif event == "PLAYER_LOGIN" then
         FISHING_NAME = SpellName(7620)
+        if FISHING_NAME then barText:SetText(FISHING_NAME) end
         -- leftover boost from a crash / disconnect mid-fishing
         if DB.saved then RestoreBoost("last session ended while fishing") end
         LayoutMarker()
         PlaceBar()
         RegisterSettings()
+        -- after a /reload mid-cast no CHANNEL_START fires, so pick the cast up here
+        local _, _, _, _, _, _, _, channelSpell = UnitChannelInfo("player")
+        if channelSpell and IsFishingSpell(channelSpell) then StartFishing(true) end
     elseif event == "PLAYER_LOGOUT" then
         RestoreBoost(false)
     elseif event == "UNIT_SPELLCAST_CHANNEL_START" then
@@ -558,7 +588,7 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, a3)
         if isFishing then StopFishing() end
     else
         -- nameplate / soft-target changes
-        if event == "PLAYER_SOFT_INTERACT_CHANGED" then softGUID = a2 end
+        if event == "PLAYER_SOFT_INTERACT_CHANGED" then softGUID, softChangedAt = a2, GetTime() end
         RefreshMarker()
     end
 end)

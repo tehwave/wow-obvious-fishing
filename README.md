@@ -12,7 +12,13 @@ It posts a line in chat whenever it changes your sound settings and when it puts
 
 ## Install
 
-Copy the `ObviousFishing` folder into `World of Warcraft/_forever_/Interface/AddOns/` and restart the game.
+The addon folder must be named exactly `ObviousFishing` (matching `ObviousFishing.toc`), or WoW won't load it.
+
+- **With git:** from `World of Warcraft/_forever_/Interface/AddOns/`, run
+  `git clone https://github.com/tehwave/wow-obvious-fishing.git ObviousFishing`
+- **From a download:** unzip it, rename the folder (e.g. `wow-obvious-fishing-main`) to `ObviousFishing`, and move it into `World of Warcraft/_forever_/Interface/AddOns/`.
+
+Then restart the game.
 
 ## Options
 
