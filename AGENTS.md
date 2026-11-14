@@ -73,11 +73,15 @@ Enable Lua errors with `/console scriptErrors 1`.
 ## Releasing
 
 1. Don't edit a version number anywhere; the packager takes it from the tag.
-2. Create and push an annotated tag:
+2. Add a section for the new version at the top of `CHANGELOG.md`, written for
+   players. It becomes the release notes on GitHub and CurseForge, and
+   CurseForge rejects files without a changelog. Don't tag a release that only
+   re-uploads the same thing; CurseForge treats that as update spam.
+3. Create and push an annotated tag:
    ```bash
    git tag -a v1.0.1 -m "v1.0.1"
    git push origin v1.0.1
    ```
-3. The workflow builds `ObviousFishing-v1.0.1.zip`, creates a GitHub Release
-   with a changelog from the commits since the previous tag, and uploads to
-   CurseForge once it's configured (see CURSEFORGE.md).
+4. The workflow builds `ObviousFishing-v1.0.1.zip`, creates a GitHub Release
+   with `CHANGELOG.md` as the release notes, and uploads to CurseForge once
+   it's configured (see CURSEFORGE.md).

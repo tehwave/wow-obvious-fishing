@@ -1,8 +1,14 @@
 # Read by BigWigsMods/packager when building the release zip.
 package-as: ObviousFishing
 
+# Release notes for GitHub and CurseForge (CurseForge requires a changelog per file).
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
+
 # Keep developer-only files out of the zip players download.
 ignore:
   - AGENTS.md
   - CURSEFORGE.md
+  - curseforge-description.md
   - media
