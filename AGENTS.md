@@ -67,7 +67,7 @@ pip install --target <some-temp-dir> luaparser
 python -c "import sys; sys.path.insert(0, '<some-temp-dir>'); from luaparser import ast; ast.parse(open('ObviousFishing.lua', encoding='utf-8').read()); print('PARSE OK')"
 ```
 
-Then test in game: `/reload`, `/bobber test`, and an actual fishing cast.
+Then test in game: `/reload`, `/obvfish test`, and an actual fishing cast.
 Enable Lua errors with `/console scriptErrors 1`.
 
 ## Releasing

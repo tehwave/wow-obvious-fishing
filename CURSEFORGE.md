@@ -11,7 +11,7 @@ On the CurseForge author site, create a new **World of Warcraft** addon project.
 | --- | --- |
 | Name | Obvious Fishing |
 | Summary | Never miss a bite: a loud bite splash, a marker on your own bobber, and a fishing cast bar for WoW Forever. |
-| Description | Paste the content of `README.md`, from "What it does" through "FAQ" (drop the Install section; CurseForge handles that) |
+| Description | Paste the content of `README.md`, from "What it does" through "Credits" (drop the Install section; CurseForge handles that) |
 | Category | Whatever fits best: a professions/fishing category if offered, otherwise a general one like Miscellaneous |
 | License | MIT (matches the `LICENSE` file in the repo) |
 | Source / Issues links | https://github.com/tehwave/wow-obvious-fishing and https://github.com/tehwave/wow-obvious-fishing/issues |

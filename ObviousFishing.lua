@@ -9,7 +9,7 @@
 --     thing moving on screen is the bobber.
 --   * Shows a cast timer bar styled like the default cast bar.
 -- Everything is restored a few seconds after you stop fishing.
--- Options: Game Menu > Options > AddOns > Obvious Fishing, or /bobber.
+-- Options: Game Menu > Options > AddOns > Obvious Fishing, or /obvfish.
 
 local ADDON = ...
 local BOBBER_ENTRY_ID = "35591" -- Fishing Bobber game object entry
@@ -20,6 +20,7 @@ local DEFAULTS = {
     sfxVolume     = 1.0,
     muteMusic     = true,
     muteAmbience  = true,
+    backgroundSound = true, -- keep playing sound while the game is in the background
     restoreDelay  = 12,    -- seconds after the last cast before sound/cvars go back
     autoLoot      = true,  -- turn auto loot on while fishing
     lureReminder  = true,  -- remind when the fishing pole has no lure
@@ -34,6 +35,24 @@ local DEFAULTS = {
 }
 
 local RAID_ICON_NAMES = { "star", "circle", "diamond", "triangle", "moon", "square", "cross", "skull" }
+
+local REPO_URL = "https://github.com/tehwave/wow-obvious-fishing"
+-- Keep in sync with the Credits section of README.md (used for the CurseForge page).
+local CREDITS = {
+    { "Made by", "tehwave" },
+    { "Built with help from", "Claude by Anthropic" },
+    { "Released with", "BigWigsMods packager" },
+    { "Blizzard UI reference", "Gethe/wow-ui-source" },
+    { "License", "MIT" },
+}
+
+local function AddonVersionText()
+    local getMeta = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
+    local v = getMeta and getMeta(ADDON, "Version")
+    -- unpackaged copies still have the packager's placeholder
+    if not v or v:find("@", 1, true) then return "development version" end
+    return "version " .. v:gsub("^v", "") -- release versions are tag names like "v1.0.0"
+end
 
 local FISHING_IDS = {
     [7620] = true, [7731] = true, [7732] = true, [18248] = true,
@@ -61,6 +80,14 @@ local function Print(msg)
     DEFAULT_CHAT_FRAME:AddMessage("|cff33ccffObvious Fishing:|r " .. msg)
 end
 
+local function PrintCredits()
+    Print(AddonVersionText())
+    for _, line in ipairs(CREDITS) do
+        Print(("  |cffffd200%s:|r %s"):format(line[1], line[2]))
+    end
+    Print("  " .. REPO_URL)
+end
+
 ---------------------------------------------------------------------------
 -- CVar boost / restore
 ---------------------------------------------------------------------------
@@ -75,10 +102,13 @@ local function BuildBoost()
         SoftTargetInteractArc       = "2",
     }
     if DB.autoLoot then t.autoLootDefault = "1" end
+    if DB.backgroundSound then
+        -- hear the splash even while alt-tabbed to another window
+        t.Sound_EnableSoundWhenGameIsInBG = "1"
+    end
     if DB.soundBoost then
         t.Sound_EnableAllSound            = "1"
         t.Sound_EnableSFX                 = "1"
-        t.Sound_EnableSoundWhenGameIsInBG = "1"
         t.Sound_MasterVolume              = tostring(DB.masterVolume)
         t.Sound_SFXVolume                 = tostring(DB.sfxVolume)
         if DB.muteMusic    then t.Sound_MusicVolume    = "0" end
@@ -96,8 +126,10 @@ local function DescribeBoost()
         if DB.muteAmbience then muted[#muted + 1] = "ambience" end
         if #muted > 0 then parts[#parts + 1] = table.concat(muted, " and ") .. " muted" end
     end
+    if DB.backgroundSound then parts[#parts + 1] = "sound plays in the background" end
     if DB.autoLoot then parts[#parts + 1] = "auto loot on" end
-    parts[#parts + 1] = "bobber highlighting on"
+    if DB.showMarker then parts[#parts + 1] = "your bobber will be marked" end
+    if #parts == 0 then return "fishing helpers on." end
     return table.concat(parts, ", ") .. "."
 end
 
@@ -206,7 +238,7 @@ end
 local myBobberGUID, preCastGUID, lastBobberGUID
 
 -- returns plate, guid, how. Only lock = true (RefreshMarker) may claim a bobber
--- as ours; /bobber debug calls this without it so diagnostics change nothing.
+-- as ours; /obvfish debug calls this without it so diagnostics change nothing.
 local function FindBobberPlate(lock)
     local guid = UnitGUID("softinteract") or softGUID
     if not IsBobberGUID(guid) then return nil, guid, "no bobber soft target" end
@@ -526,6 +558,8 @@ local function RegisterSettings()
         "Silences music while you fish.")
     Checkbox("muteAmbience", "Mute ambience", ReapplyBoost,
         "Silences ambient sounds (wind, water, crowds) while you fish.")
+    Checkbox("backgroundSound", "Play sound in the background", ReapplyBoost,
+        "Keeps game sound playing while you're switched to another window, so you still hear the bite splash. Your own setting comes back when you stop fishing.")
 
     -- Fishing
     Header("Fishing")
@@ -577,6 +611,53 @@ local function RegisterSettings()
             RunTest, "Shows the marker and cast bar for a few seconds.", true))
     end
 
+    -- Credits subpage (Options > AddOns > Obvious Fishing > Credits)
+    if Settings.RegisterCanvasLayoutSubcategory then
+        local page = CreateFrame("Frame")
+        local function noop() end -- the panel calls these on canvas pages; nothing to save here
+        page.OnCommit, page.OnDefault, page.OnRefresh = noop, noop, noop
+
+        local title = page:CreateFontString(nil, "ARTWORK", "GameFontNormalHuge")
+        title:SetPoint("TOPLEFT", 16, -16)
+        title:SetText("Obvious Fishing")
+
+        local version = page:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+        version:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
+        version:SetText(AddonVersionText())
+
+        local prev = version
+        for i, line in ipairs(CREDITS) do
+            local label = page:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+            label:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, i == 1 and -20 or -10)
+            label:SetWidth(180)
+            label:SetJustifyH("LEFT")
+            label:SetText(line[1])
+            local value = page:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+            value:SetPoint("LEFT", label, "RIGHT", 8, 0)
+            value:SetText(line[2])
+            prev = label
+        end
+
+        -- links can't be clicked in game, so show the address in a box to copy from
+        local linkLabel = page:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        linkLabel:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -20)
+        linkLabel:SetText("Source code and bug reports (select and Ctrl+C to copy):")
+        local link = CreateFrame("EditBox", nil, page, "InputBoxTemplate")
+        link:SetPoint("TOPLEFT", linkLabel, "BOTTOMLEFT", 6, -6)
+        link:SetSize(360, 22)
+        link:SetAutoFocus(false)
+        link:SetText(REPO_URL)
+        link:SetCursorPosition(0)
+        link:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+        link:SetScript("OnEditFocusLost", function(self) self:HighlightText(0, 0) end)
+        link:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+        link:SetScript("OnTextChanged", function(self, userInput) -- keep it read-only
+            if userInput then self:SetText(REPO_URL); self:HighlightText() end
+        end)
+
+        Settings.RegisterCanvasLayoutSubcategory(category, page, "Credits")
+    end
+
     Settings.RegisterAddOnCategory(category)
     settingsCategory = category
 end
@@ -585,7 +666,7 @@ local function OpenSettings()
     if settingsCategory and Settings and Settings.OpenToCategory then
         Settings.OpenToCategory(settingsCategory:GetID())
     else
-        Print("the options panel isn't available - type /bobber help for commands.")
+        Print("the options panel isn't available - type /obvfish help for commands.")
     end
 end
 ObviousFishing_OpenSettings = OpenSettings -- addon compartment (minimap addon menu)
@@ -638,7 +719,7 @@ end)
 ---------------------------------------------------------------------------
 -- Slash commands
 ---------------------------------------------------------------------------
-SLASH_OBVIOUSFISHING1 = "/bobber"
+SLASH_OBVIOUSFISHING1 = "/obvfish"
 SLASH_OBVIOUSFISHING2 = "/obviousfishing"
 SlashCmdList.OBVIOUSFISHING = function(msg)
     local cmd, arg = strsplit(" ", (msg or ""):lower(), 2)
@@ -646,6 +727,8 @@ SlashCmdList.OBVIOUSFISHING = function(msg)
         OpenSettings()
     elseif cmd == "test" then
         RunTest()
+    elseif cmd == "credits" or cmd == "about" then
+        PrintCredits()
     elseif cmd == "offset" then
         local ys, xs = strsplit(" ", arg or "")
         local y, x = tonumber(ys), tonumber(xs)
@@ -655,7 +738,7 @@ SlashCmdList.OBVIOUSFISHING = function(msg)
             RefreshMarker()
             Print(("marker offset: up/down %d, left/right %d"):format(DB.markerOffset, DB.markerOffsetX))
         else
-            Print(("usage: /bobber offset <y> [x]  (negative = lower / left). now %d %d")
+            Print(("usage: /obvfish offset <y> [x]  (negative = lower / left). now %d %d")
                 :format(DB.markerOffset, DB.markerOffsetX))
         end
     elseif cmd == "reset" then
@@ -676,11 +759,12 @@ SlashCmdList.OBVIOUSFISHING = function(msg)
         end
     else
         Print("commands:")
-        Print("  /bobber - open the options panel")
-        Print("  /bobber test - preview the marker and cast bar")
-        Print("  /bobber offset <y> [x] - nudge the marker")
-        Print("  /bobber reset - restore your sound now and reset the bar position")
-        Print("  /bobber debug - (while fishing) show why your bobber is or isn't detected")
+        Print("  /obvfish - open the options panel")
+        Print("  /obvfish test - preview the marker and cast bar")
+        Print("  /obvfish credits - who made Obvious Fishing")
+        Print("  /obvfish offset <y> [x] - nudge the marker")
+        Print("  /obvfish reset - restore your sound now and reset the bar position")
+        Print("  /obvfish debug - (while fishing) show why your bobber is or isn't detected")
         Print("  Shift-drag the cast bar to move it.")
     end
 end

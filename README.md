@@ -5,6 +5,7 @@
 ## What it does
 
 - **Loud bite splash.** While you fish, your game sound is turned up so the splash is easy to hear, and music and ambient sounds can be muted. Your normal sound settings come back on their own a few seconds after you stop fishing.
+- **Hear it while alt-tabbed.** Game sound keeps playing while you're switched to another window, so you still hear the splash. Your own "Sound in Background" setting comes back when you stop fishing.
 - **Marks your bobber.** A raid target icon sits on your own bobber, so you can tell it apart from other players' bobbers. The marker never moves or animates, so the only thing moving on screen is the bobber.
 - **Fishing cast bar.** A cast bar in the same style as the default one shows how much time your cast has left.
 - **Auto loot while fishing.** Catches go straight to your bags while you fish. Your own auto loot setting comes back when you stop.
@@ -23,13 +24,14 @@
 
 ## Settings
 
-Open **Game Menu → Options → AddOns → Obvious Fishing**, click it in the minimap addon menu, or type `/bobber`.
+Open **Game Menu → Options → AddOns → Obvious Fishing**, click it in the minimap addon menu, or type `/obvfish`.
 
 | Setting | What it does |
 | --- | --- |
 | Turn sound up while fishing | Raises your game sound while you fish |
 | Volume while fishing | How loud the game gets while you fish |
 | Mute music / Mute ambience | Silences music or ambient sounds while you fish |
+| Play sound in the background | Keeps sound playing while you're in another window |
 | Auto loot while fishing | Turns auto loot on while you fish |
 | Remind me when my pole has no lure | Chat reminder when you fish without a lure |
 | Mark your bobber | Shows the icon on your own bobber |
@@ -46,11 +48,12 @@ Bind a key to **Interact** (Game Menu → Options → Keybindings, then search f
 
 | Command | What it does |
 | --- | --- |
-| `/bobber` | Open the settings |
-| `/bobber test` | Preview the marker and cast bar |
-| `/bobber offset <y> [x]` | Nudge the marker up/down (and left/right) |
-| `/bobber reset` | Put your sound back right away and reset the cast bar position |
-| `/bobber debug` | While fishing, show why your bobber is or isn't being marked |
+| `/obvfish` | Open the settings |
+| `/obvfish test` | Preview the marker and cast bar |
+| `/obvfish credits` | Show the credits in chat |
+| `/obvfish offset <y> [x]` | Nudge the marker up/down (and left/right) |
+| `/obvfish reset` | Put your sound back right away and reset the cast bar position |
+| `/obvfish debug` | While fishing, show why your bobber is or isn't being marked |
 
 ## FAQ
 
@@ -64,11 +67,22 @@ No. It remembers your settings before changing anything and puts them back when 
 No. The game only lets addons mute a sound for everyone, which would include your own splash.
 
 **The marker isn't on my bobber.**
-Face your bobber. The game only gives the bobber a nameplate (which the marker sits on) when it's in front of you. If it still doesn't show, type `/bobber debug` while fishing and include the output in a bug report.
+Face your bobber. The game only gives the bobber a nameplate (which the marker sits on) when it's in front of you. If it still doesn't show, type `/obvfish debug` while fishing and include the output in a bug report.
 
 ## Bugs and ideas
 
-Open an issue on the [GitHub issues page](https://github.com/tehwave/wow-obvious-fishing/issues). The bug report form asks for what's needed to fix it, like the `/bobber debug` output and any Lua error.
+Open an issue on the [GitHub issues page](https://github.com/tehwave/wow-obvious-fishing/issues). The bug report form asks for what's needed to fix it, like the `/obvfish debug` output and any Lua error.
+
+## Credits
+
+<!-- Keep in sync with the CREDITS table in ObviousFishing.lua (the in-game Credits page). -->
+
+- Made by **tehwave**
+- Built with help from **[Claude](https://claude.com)** by Anthropic
+- Released with **[BigWigsMods packager](https://github.com/BigWigsMods/packager)**
+- Blizzard UI reference: **[Gethe/wow-ui-source](https://github.com/Gethe/wow-ui-source)**
+
+The credits are also in the game under **Options → AddOns → Obvious Fishing → Credits**, or type `/obvfish credits`.
 
 ## License
 

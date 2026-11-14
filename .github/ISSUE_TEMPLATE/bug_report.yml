@@ -29,8 +29,8 @@ body:
   - type: textarea
     id: debug
     attributes:
-      label: /bobber debug output
-      description: While fishing, type `/bobber debug` and paste the chat lines it prints. Most useful for marker problems.
+      label: /obvfish debug output
+      description: While fishing, type `/obvfish debug` and paste the chat lines it prints. Most useful for marker problems.
       render: text
 
   - type: textarea
