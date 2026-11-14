@@ -1,0 +1,9 @@
+## Interface: 16001
+## Title: Obvious Fishing
+## Notes: Loud bite splash, a marker on your own bobber, and a fishing cast bar.
+## Version: 1.0.0
+## IconTexture: Interface\Icons\Trade_Fishing
+## SavedVariables: ObviousFishingDB
+## AddonCompartmentFunc: ObviousFishing_OpenSettings
+
+ObviousFishing.lua
