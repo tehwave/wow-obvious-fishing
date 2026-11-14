@@ -1,0 +1,64 @@
+name: Bug report
+description: Something in Obvious Fishing isn't working right
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! The details below make it much easier to find and fix the problem.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What went wrong, and what did you expect to happen instead?
+      placeholder: e.g. The marker doesn't show on my bobber when I fish next to other players.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen
+      description: Steps that lead to the problem, if you know them.
+      placeholder: |
+        1. Go to ...
+        2. Cast Fishing ...
+        3. ...
+
+  - type: textarea
+    id: debug
+    attributes:
+      label: /bobber debug output
+      description: While fishing, type `/bobber debug` and paste the chat lines it prints. Most useful for marker problems.
+      render: text
+
+  - type: textarea
+    id: lua-error
+    attributes:
+      label: Lua error
+      description: |
+        If you got an error popup, paste the full text here. To see errors, type `/console scriptErrors 1` and `/reload`.
+        A bug-catching addon like BugSack also works.
+      render: text
+
+  - type: input
+    id: addon-version
+    attributes:
+      label: Obvious Fishing version
+      description: Shown in the AddOns list on the character select screen, or on the CurseForge/GitHub download.
+      placeholder: e.g. v1.0.0
+    validations:
+      required: true
+
+  - type: input
+    id: game-version
+    attributes:
+      label: Game version
+      description: Your WoW Forever build (shown at the bottom left of the login screen).
+
+  - type: textarea
+    id: other-addons
+    attributes:
+      label: Other addons
+      description: Any other addons you use that change nameplates, the cast bar, or sound settings.

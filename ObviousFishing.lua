@@ -21,6 +21,8 @@ local DEFAULTS = {
     muteMusic     = true,
     muteAmbience  = true,
     restoreDelay  = 12,    -- seconds after the last cast before sound/cvars go back
+    autoLoot      = true,  -- turn auto loot on while fishing
+    lureReminder  = true,  -- remind when the fishing pole has no lure
     showMarker    = true,
     raidIcon      = 1,     -- 1 star, 2 circle, 3 diamond, 4 triangle, 5 moon, 6 square, 7 cross, 8 skull
     iconSize      = 26,
@@ -51,6 +53,7 @@ local FISHING_NAME -- resolved on login (localized "Fishing")
 
 local DB
 local isFishing = false
+local lureWarned = false -- already reminded about a missing lure this fishing session
 local restoreTimer
 local settingsCategory
 
@@ -71,6 +74,7 @@ local function BuildBoost()
         SoftTargetInteractRange     = "30",
         SoftTargetInteractArc       = "2",
     }
+    if DB.autoLoot then t.autoLootDefault = "1" end
     if DB.soundBoost then
         t.Sound_EnableAllSound            = "1"
         t.Sound_EnableSFX                 = "1"
@@ -84,12 +88,17 @@ local function BuildBoost()
 end
 
 local function DescribeBoost()
-    if not DB.soundBoost then return "bobber highlighting on." end
-    local muted = {}
-    if DB.muteMusic then muted[#muted + 1] = "music" end
-    if DB.muteAmbience then muted[#muted + 1] = "ambience" end
-    local extra = #muted > 0 and (", " .. table.concat(muted, " and ") .. " muted") or ""
-    return ("sound turned up to %d%%%s, bobber highlighting on."):format(DB.masterVolume * 100 + 0.5, extra)
+    local parts = {}
+    if DB.soundBoost then
+        parts[#parts + 1] = ("sound turned up to %d%%"):format(DB.masterVolume * 100 + 0.5)
+        local muted = {}
+        if DB.muteMusic then muted[#muted + 1] = "music" end
+        if DB.muteAmbience then muted[#muted + 1] = "ambience" end
+        if #muted > 0 then parts[#parts + 1] = table.concat(muted, " and ") .. " muted" end
+    end
+    if DB.autoLoot then parts[#parts + 1] = "auto loot on" end
+    parts[#parts + 1] = "bobber highlighting on"
+    return table.concat(parts, ", ") .. "."
 end
 
 local function ApplyBoost(quiet)
@@ -104,7 +113,10 @@ local function ApplyBoost(quiet)
         end
     end
     DB.saved = saved -- persisted, so a crash/disconnect still gets restored next login
-    if not quiet then Print("fishing - " .. DescribeBoost()) end
+    if not quiet then
+        lureWarned = false -- a new fishing session: remind about a missing lure again
+        Print("fishing - " .. DescribeBoost())
+    end
 end
 
 -- reason: chat text explaining why; false = restore silently
@@ -386,6 +398,28 @@ local function IsFishingSpell(spellID)
     return false
 end
 
+local function HasFishingPole()
+    local id = GetInventoryItemID("player", INVSLOT_MAINHAND or 16)
+    if not id then return false end
+    local getInfo = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
+    local _, _, _, _, _, classID, subclassID = getInfo(id)
+    local weapon = Enum and Enum.ItemClass and Enum.ItemClass.Weapon or 2
+    local pole = Enum and Enum.ItemWeaponSubclass and Enum.ItemWeaponSubclass.Fishingpole or 20
+    return classID == weapon and subclassID == pole
+end
+
+-- Lures are temporary weapon enchants. Remind once per fishing session, and
+-- again if a lure runs out mid-session.
+local function CheckLure()
+    if not DB.lureReminder or not HasFishingPole() then return end
+    if GetWeaponEnchantInfo() then
+        lureWarned = false
+    elseif not lureWarned then
+        lureWarned = true
+        Print("|cffffd200your fishing pole has no lure.|r")
+    end
+end
+
 -- resumed: picking up a cast already in progress (after /reload)
 local function StartFishing(resumed)
     isFishing = true
@@ -401,6 +435,7 @@ local function StartFishing(resumed)
     end
     myBobberGUID = nil
     ApplyBoost()
+    CheckLure()
     local _, _, _, startMS, endMS = UnitChannelInfo("player")
     if startMS then
         castStart, castEnd = startMS / 1000, endMS / 1000
@@ -491,6 +526,13 @@ local function RegisterSettings()
         "Silences music while you fish.")
     Checkbox("muteAmbience", "Mute ambience", ReapplyBoost,
         "Silences ambient sounds (wind, water, crowds) while you fish.")
+
+    -- Fishing
+    Header("Fishing")
+    Checkbox("autoLoot", "Auto loot while fishing", ReapplyBoost,
+        "Turns auto loot on while you fish, so catches go straight to your bags. Your own setting comes back when you stop.")
+    Checkbox("lureReminder", "Remind me when my pole has no lure", function() end,
+        "Posts a chat message when you start fishing without a lure on your fishing pole, or when a lure runs out.")
 
     -- Bobber
     Header("Bobber")

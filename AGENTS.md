@@ -6,9 +6,11 @@ docs are in README.md; keep that one written for players.
 ## What this is
 
 A single-file World of Warcraft addon for **WoW Forever** (`## Interface: 16001`).
-While the player fishes it boosts sound CVars, marks the player's own bobber
-with a static raid icon on its soft-target nameplate, and shows a fishing cast
-bar. Everything is restored after fishing stops.
+While the player fishes it boosts sound CVars, turns on auto loot, marks the
+player's own bobber with a static raid icon on its soft-target nameplate, shows
+a fishing cast bar, and reminds the player once per session if their fishing
+pole has no lure (lures are temporary weapon enchants: `GetWeaponEnchantInfo`).
+Every changed setting is restored after fishing stops.
 
 - `ObviousFishing.lua` - all code
 - `ObviousFishing.toc` - addon manifest (`@project-version@` is replaced by the packager)
